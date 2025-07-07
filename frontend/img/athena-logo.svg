@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="250" height="80" viewBox="0 0 250 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- Athena Logo -->
+  <path d="M40,20 L60,20 L70,40 L80,20 L100,20 L80,60 L60,40 L40,60 L20,20 L40,20 Z" fill="#2c3e50"/>
+  <text x="110" y="45" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#2c3e50">athena</text>
+</svg>

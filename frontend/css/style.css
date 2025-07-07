@@ -10,15 +10,23 @@ body {
 .logo-container {
     display: flex;
     justify-content: center;
-    margin: 0 auto 20px auto;
-    padding: 10px 0;
-    max-width: 100%;
+    align-items: center;
+    padding: 15px 0;
+    margin: 0 auto;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%;
 }
 
 .athena-logo {
     height: 60px;
     width: auto;
-    max-width: 100%;
+    max-width: 300px;
+    transition: transform 0.3s ease;
+}
+
+.athena-logo:hover {
+    transform: scale(1.05);
 }
 
 .container {
