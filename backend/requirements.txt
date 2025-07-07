@@ -1,0 +1,22 @@
+fastapi
+uvicorn[standard]
+python-multipart
+
+# For text extraction
+PyPDF2
+python-docx
+beautifulsoup4
+lxml
+
+# For async requests
+httpx
+
+# For environment variables
+python-dotenv
+
+# For metadata generation
+sumy
+yake
+
+# For Server-Sent Events
+sse-starlette

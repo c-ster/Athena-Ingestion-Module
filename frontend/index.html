@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athena Research Ingestion</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <img src="img/logo.svg" alt="Athena Logo" class="athena-logo">
+        </div>
+        <header>
+            <h1>Athena Research Ingestion</h1>
+            <p>Upload and process multilingual academic research papers.</p>
+        </header>
+
+        <main>
+            <section id="athena-ingestion" class="app-section">
+                <h2>Upload Documents</h2>
+                <div id="drop-zone" class="drop-zone">
+                    <p>Drag & drop files here or click to select files</p>
+                    <button id="file-selector-btn" class="btn">Select Files</button>
+                    <input type="file" id="file-input" multiple style="display: none;">
+                </div>
+                <div class="upload-queue">
+                    <div id="file-list-container">
+                        <ul id="file-list"></ul>
+                    </div>
+                </div>
+            </section>
+            <div id="upload-status-container" style="display: none;">
+                <h2>Upload Status</h2>
+                <div id="upload-status-list"></div>
+            </div>
+
+            <div id="uploaded-files-container">
+                <h2>Uploaded Files</h2>
+                <ul id="uploaded-files-list"></ul>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
