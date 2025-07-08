@@ -8,10 +8,22 @@ TRANSLATOR_API_KEY = os.environ.get("TRANSLATOR_API_KEY")
 TRANSLATOR_ENDPOINT = "https://api.cognitive.microsofttranslator.com/"
 TRANSLATOR_LOCATION = os.environ.get("TRANSLATOR_LOCATION", "global")
 
-async def translate_text(text: str) -> str:
-    """Translates text to English using Microsoft Translator API, with chunking and retry logic."""
+async def translate_text(text: str, target_lang: str = 'en') -> str:
+    """
+    Translates text to the target language using Microsoft Translator API.
+    
+    Args:
+        text: The text to translate
+        target_lang: Target language code (default: 'en' for English)
+        
+    Returns:
+        Translated text as a string
+    """
     if not TRANSLATOR_API_KEY:
         raise ValueError("TRANSLATOR_API_KEY environment variable not set.")
+    
+    if not text or not text.strip():
+        return text
 
     # Increased chunk size to reduce the number of requests
     CHUNK_SIZE = 4800
@@ -30,7 +42,7 @@ async def translate_text(text: str) -> str:
             }
             params = {
                 'api-version': '3.0',
-                'to': 'en'
+                'to': target_lang
             }
             body = [{'text': chunk}]
 

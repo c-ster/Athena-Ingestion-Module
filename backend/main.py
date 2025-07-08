@@ -11,9 +11,18 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Debug: Print environment variables
+print("\n=== Environment Variables ===")
+print(f"TRANSLATOR_API_KEY: {'Set' if os.getenv('TRANSLATOR_API_KEY') else 'Not Set'}")
+print(f"TRANSLATOR_LOCATION: {os.getenv('TRANSLATOR_LOCATION')}")
+print(f"OPENAI_API_KEY: {'Set' if os.getenv('OPENAI_API_KEY') else 'Not Set'}")
+print(f"OPENAI_MODEL: {os.getenv('OPENAI_MODEL')}")
+print("==========================\n")
 
 from text_extraction import (
     extract_text_from_pdf,
@@ -135,13 +144,13 @@ async def process_and_translate_file(file_path: str, file_ext: str, filename: st
             print(f"No text found in {os.path.basename(file_path)}. Skipping translation.")
             return
 
-        # 2. Process and save metadata
-        await process_and_save_metadata(file_path, file_ext, original_text, filename)
-
-        # 3. Translate Text
+        # 2. Translate Text First
         await status_queue.put({"filename": filename, "status": "Translating..."})
         print(f"Translating text for {os.path.basename(file_path)}...")
         translated_text = await translate_text(original_text)
+        
+        # 3. Process and save metadata using the translated text
+        await process_and_save_metadata(file_path, file_ext, translated_text, filename)
 
         # 4. Save Translated File
         if translated_text:
@@ -160,20 +169,63 @@ async def process_and_translate_file(file_path: str, file_ext: str, filename: st
 
 
 async def process_and_save_metadata(file_path, file_ext, text_content, filename: str):
-    """Processes and saves metadata for a file."""
+    """
+    Processes and saves metadata for a file with enhanced error handling.
+    
+    Args:
+        file_path: Path to the file
+        file_ext: File extension
+        text_content: Extracted text content
+        filename: Original filename
+        
+    Returns:
+        Dictionary containing the processed metadata
+    """
+    base_filename = os.path.splitext(os.path.basename(file_path))[0]
+    metadata_filename = f"{base_filename}_metadata.json"
+    metadata_path = os.path.join(UPLOADS_DIR, metadata_filename)
+    
+    # Default minimal metadata in case of errors
+    minimal_metadata = {
+        'title': base_filename,
+        'authors': ['No Authors'],
+        'abstract': 'No abstract available',
+        'keywords': ['general']
+    }
+    
     try:
+        # Update status
         await status_queue.put({"filename": filename, "status": "Extracting Metadata..."})
-        metadata = await asyncio.to_thread(process_file_metadata, file_path, file_ext, text_content)
-        base_filename = os.path.splitext(os.path.basename(file_path))[0]
-        metadata_filename = f"{base_filename}_metadata.json"
-        metadata_path = os.path.join(UPLOADS_DIR, metadata_filename)
-
+        
+        # Process metadata asynchronously
+        metadata = await process_file_metadata(file_path, file_ext, text_content)
+        
+        # Ensure we have at least the minimal required fields
+        if not metadata:
+            metadata = minimal_metadata
+        
+        # Save the metadata to a file
         with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=4)
+            json.dump(metadata, f, ensure_ascii=False, indent=4, default=str)
 
         print(f"Metadata saved for {os.path.basename(file_path)}")
+        return metadata
+        
     except Exception as e:
-        print(f"An error occurred during metadata processing for {os.path.basename(file_path)}: {e}")
+        error_msg = f"Error processing metadata for {os.path.basename(file_path)}: {str(e)}"
+        print(error_msg)
+        
+        # Save error information to the metadata
+        minimal_metadata['error'] = error_msg
+        
+        try:
+            # Still try to save the minimal metadata
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(minimal_metadata, f, ensure_ascii=False, indent=4, default=str)
+        except Exception as save_error:
+            print(f"Failed to save minimal metadata: {save_error}")
+        
+        return minimal_metadata
 
 
 async def process_file_in_background(filename: str, file_ext: str, file_path: str):
@@ -184,76 +236,138 @@ async def process_file_in_background(filename: str, file_ext: str, file_path: st
 
         await process_and_translate_file(file_path, file_ext, filename)
         await status_queue.put({"filename": filename, "status": "Complete", "detail": "Processing finished successfully."})
+        return {"filename": filename, "status": "success"}
 
     except HTTPException as http_exc:
         if os.path.exists(file_path):
-            os.remove(file_path)
-        await status_queue.put({"filename": filename, "status": "Error", "detail": http_exc.detail})
+            os.path.exists(file_path) and os.remove(file_path)
+        error_msg = f"{http_exc.detail}"
+        await status_queue.put({"filename": filename, "status": "Error", "detail": error_msg})
+        return {"filename": filename, "status": "error", "error": error_msg}
+        
     except Exception as e:
         if os.path.exists(file_path):
-            os.remove(file_path)
-        await status_queue.put({"filename": filename, "status": "Error", "detail": f"An unexpected error occurred: {e}"})
+            os.path.exists(file_path) and os.remove(file_path)
+        error_msg = f"An unexpected error occurred: {str(e)}"
+        await status_queue.put({"filename": filename, "status": "Error", "detail": error_msg})
+        return {"filename": filename, "status": "error", "error": error_msg}
+
+async def process_single_file(file: UploadFile) -> dict:
+    """Process a single uploaded file and return the result."""
+    filename = file.filename
+    file_ext = os.path.splitext(filename)[1].lower()
+    file_path = os.path.join(UPLOADS_DIR, filename)
+    
+    try:
+        # Check file extension
+        if file_ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"File type not allowed for {filename}")
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Check file size
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_FILE_SIZE:
+            os.path.exists(file_path) and os.remove(file_path)
+            raise HTTPException(status_code=413, detail=f"File size exceeds limit for {filename}")
+        
+        # Process the file in the background
+        return await process_file_in_background(filename, file_ext, file_path)
+        
+    except Exception as e:
+        if os.path.exists(file_path):
+            os.path.exists(file_path) and os.remove(file_path)
+        error_msg = str(e.detail) if hasattr(e, 'detail') else str(e)
+        return {
+            "filename": filename,
+            "status": "error",
+            "error": f"Failed to process file {filename}: {error_msg}"
+        }
 
 @app.post("/api/upload/")
 async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
-    """Handles file uploads, saves them, and schedules them for background processing."""
-    for file in files:
-        filename = file.filename
-        file_ext = os.path.splitext(filename)[1].lower()
-        file_path = os.path.join(UPLOADS_DIR, filename)
-
-        if file_ext not in ALLOWED_EXTENSIONS:
-            raise HTTPException(status_code=400, detail=f"File type not allowed for {filename}")
-
-        try:
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            
-            file_size = os.path.getsize(file_path)
-            if file_size > MAX_FILE_SIZE:
-                os.remove(file_path)
-                raise HTTPException(status_code=413, detail=f"File size exceeds limit for {filename}")
-            
-            background_tasks.add_task(process_file_in_background, filename, file_ext, file_path)
-
-        except Exception as e:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            raise HTTPException(status_code=500, detail=f"Failed to save file {filename}: {e}")
-
-    return {"message": f"Started processing {len(files)} file(s) in the background."}
+    """
+    Handles multiple file uploads, saves them, and schedules them for background processing.
+    
+    Args:
+        files: List of uploaded files
+        
+    Returns:
+        dict: Status message with details about the upload
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    
+    # Process files in parallel
+    tasks = [process_single_file(file) for file in files]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Count successful and failed uploads
+    success_count = sum(1 for r in results if isinstance(r, dict) and r.get('status') == 'success')
+    error_count = len(files) - success_count
+    
+    return {
+        "message": f"Started processing {len(files)} file(s)",
+        "successful": success_count,
+        "failed": error_count,
+        "details": results
+    }
 
 
 @app.get("/api/files/")
 async def get_uploaded_files():
-    """Returns a list of uploaded files with their translated and metadata counterparts."""
-    files = os.listdir(UPLOADS_DIR)
-    processed_files = {}
-
-    # First pass: collect all original files
-    for filename in files:
-        if filename.startswith('.') or filename.endswith(('_translated.txt', '_metadata.json')):
-            continue
-        base_name = os.path.splitext(filename)[0]
-        if base_name not in processed_files:
-            processed_files[base_name] = {"filename": filename}
-
-    # Second pass: attach translated files and metadata
-    for filename in files:
-        if filename.endswith('_translated.txt'):
-            base_name = filename.replace('_translated.txt', '')
-            if base_name in processed_files:
-                processed_files[base_name]['translated_filename'] = filename
-        elif filename.endswith('_metadata.json'):
-            base_name = filename.replace('_metadata.json', '')
-            if base_name in processed_files:
+    """Returns a list of uploaded files with their translated and metadata counterparts.
+    
+    Returns:
+        A dictionary with a 'files' key containing a list of file objects.
+        Each file object contains:
+        - filename: Original filename
+        - translated_filename: Name of the translated file (if exists)
+        - metadata: Dictionary of metadata (if exists)
+    """
+    try:
+        files = os.listdir(UPLOADS_DIR)
+        file_map = {}
+        
+        # First pass: build a map of all files by their base names
+        for filename in files:
+            if filename.startswith('.'):
+                continue
+                
+            # Handle different file types
+            if filename.endswith('_translated.txt'):
+                base_name = filename[:-len('_translated.txt')]
+                file_map.setdefault(base_name, {})['translated_filename'] = filename
+            elif filename.endswith('_metadata.json'):
+                base_name = filename[:-len('_metadata.json')]
                 try:
                     with open(os.path.join(UPLOADS_DIR, filename), 'r', encoding='utf-8') as f:
-                        processed_files[base_name]['metadata'] = json.load(f)
+                        file_map.setdefault(base_name, {})['metadata'] = json.load(f)
                 except Exception as e:
                     print(f"Error reading metadata file {filename}: {e}")
-
-    return {"files": list(processed_files.values())}
+            else:
+                # This is an original file
+                base_name = os.path.splitext(filename)[0]
+                file_map.setdefault(base_name, {})['filename'] = filename
+        
+        # Convert the map to the expected format
+        result = []
+        for base_name, file_info in file_map.items():
+            # Only include entries that have an original filename
+            if 'filename' in file_info:
+                result.append({
+                    'filename': file_info['filename'],
+                    'translated_filename': file_info.get('translated_filename'),
+                    'metadata': file_info.get('metadata')
+                })
+        
+        return {"files": result}
+        
+    except Exception as e:
+        print(f"Error in get_uploaded_files: {e}")
+        return {"files": [], "error": str(e)}
 
 
 # Mount the uploads directory to make files accessible

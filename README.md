@@ -1,22 +1,77 @@
 # Athena Multilingual Research Ingestion Module
 
-This project is a multilingual academic research ingestion module designed to process and analyze academic papers in various formats and languages.
+A powerful tool for ingesting, processing, and analyzing academic research papers in multiple languages. This module provides a seamless pipeline for document upload, language translation, metadata extraction, and content analysis.
 
-## System Architecture
+## 🌟 Features
 
-This project is composed of a frontend application, a backend service, and various components for data processing and storage.
+- **Multilingual Support**: Automatically detects and translates documents
+- **Document Processing**: Handles PDF, DOCX, and other common academic formats
+- **Metadata Extraction**: Automatically extracts key information from documents
+- **Real-time Updates**: Live status updates during file processing
+- **Secure File Handling**: Built-in virus scanning and secure file storage
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Node.js 14+ (for frontend development)
+- ClamAV (for virus scanning)
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/c-ster/Athena-Ingestion-Module.git
+   cd Athena-Ingestion-Module
+   ```
+
+2. Set up the backend:
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+3. Configure environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys and settings
+   ```
+
+4. Start the backend server:
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+5. Open the frontend in your browser:
+   ```
+   open frontend/index.html
+   ```
+
+## 🏗️ System Architecture
 
 ### Frontend
--   **Framework**: Static HTML, CSS, and JavaScript.
--   **Purpose**: Provides the user interface for interacting with the system, including the new file upload and review dashboard.
+- **Framework**: Static HTML, CSS, and JavaScript
+- **Features**:
+  - Drag-and-drop file upload
+  - Real-time processing status
+  - Document preview and management
+  - Responsive design
 
 ### Backend
--   **Framework**: Python (FastAPI).
--   **Components**:
-    -   **API**: Exposes endpoints for the frontend to communicate with the backend. This will include file upload endpoints.
-    -   **Database**: Uses SQLite for storing structured data like document metadata.
-    -   **Ingestion Pipeline**: A module for processing uploaded research papers. This will include:
-        -   Language detection and translation.
+- **Framework**: Python (FastAPI)
+- **Components**:
+  - **REST API**: JSON endpoints for frontend communication
+  - **Document Processing**:
+    - File type detection and validation
+    - Text extraction from various formats
+    - Language detection and translation
+    - Metadata extraction
+  - **Security**:
+    - File virus scanning (ClamAV)
+    - Secure file handling
+    - Input validation
         -   Document parsing.
         -   Metadata extraction.
 

@@ -17,6 +17,7 @@ python-dotenv
 # For metadata generation
 sumy
 yake
+openai
 
 # For Server-Sent Events
 sse-starlette
